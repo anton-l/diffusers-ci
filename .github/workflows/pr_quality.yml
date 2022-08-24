@@ -25,4 +25,4 @@ jobs:
           black  --check --preview examples tests src utils
           isort --check-only examples tests src utils
           flake8 examples tests src utils
-	      doc-builder style src/diffusers docs/source --max_len 119 --check_only --path_to_docs docs/source
+          doc-builder style src/diffusers docs/source --max_len 119 --check_only --path_to_docs docs/source
