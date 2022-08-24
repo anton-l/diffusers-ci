@@ -54,7 +54,6 @@ for library in LOADABLE_CLASSES:
 
 
 class DiffusionPipeline(ConfigMixin):
-
     config_name = "model_index.json"
 
     def register_modules(self, **kwargs):
