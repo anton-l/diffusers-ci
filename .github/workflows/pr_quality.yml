@@ -8,8 +8,6 @@ jobs:
 
   check_code_quality:
     runs-on: ubuntu-latest
-    env:
-      PYTEST_TIMEOUT: 120
     steps:
       - uses: actions/checkout@v3
       - name: Set up Python

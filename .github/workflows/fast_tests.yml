@@ -4,21 +4,102 @@ on:
   push:
   pull_request:
 
-jobs:
-  build_and_test:
+env:
+  HF_HOME: /mnt/cache
+  OMP_NUM_THREADS: 8
+  MKL_NUM_THREADS: 8
+  PYTEST_TIMEOUT: 60
 
+jobs:
+  setup:
+    name: Setup
     runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+      test_map: ${{ steps.set-matrix.outputs.test_map }}
+    steps:
+      # Necessary to get the correct branch name and commit SHA for `workflow_run` event
+      # We also take into account the `push` event (we might want to test some changes in a branch)
+      - name: Prepare custom environment variables
+        shell: bash
+        # `CI_BRANCH_PUSH`: The branch name from the push event
+        # `CI_BRANCH_WORKFLOW_RUN`: The name of the branch on which this workflow is triggered by `workflow_run` event
+        # `CI_BRANCH`: The non-empty branch name from the above two (one and only one of them is empty)
+        # `CI_SHA_PUSH`: The commit SHA from the push event
+        # `CI_SHA_WORKFLOW_RUN`: The commit SHA that triggers this workflow by `workflow_run` event
+        # `CI_SHA`: The non-empty commit SHA from the above two (one and only one of them is empty)
+        run: |
+          CI_BRANCH_PUSH=${{ github.event.ref }}
+          CI_BRANCH_PUSH=${CI_BRANCH_PUSH/'refs/heads/'/''}
+          CI_BRANCH_WORKFLOW_RUN=${{ github.event.workflow_run.head_branch }}
+          CI_SHA_PUSH=${{ github.event.head_commit.id }}
+          CI_SHA_WORKFLOW_RUN=${{ github.event.workflow_run.head_sha }}
+          echo $CI_BRANCH_PUSH
+          echo $CI_BRANCH_WORKFLOW_RUN
+          echo $CI_SHA_PUSH
+          echo $CI_SHA_WORKFLOW_RUN
+          [[ ! -z "$CI_BRANCH_PUSH" ]] && echo "CI_BRANCH=$CI_BRANCH_PUSH" >> $GITHUB_ENV || echo "CI_BRANCH=$CI_BRANCH_WORKFLOW_RUN" >> $GITHUB_ENV
+          [[ ! -z "$CI_SHA_PUSH" ]] && echo "CI_SHA=$CI_SHA_PUSH" >> $GITHUB_ENV || echo "CI_SHA=$CI_SHA_WORKFLOW_RUN" >> $GITHUB_ENV
+
+      - name: print environment variables
+        run: |
+          echo "env.CI_BRANCH = ${{ env.CI_BRANCH }}"
+          echo "env.CI_SHA = ${{ env.CI_SHA }}"
+
+      - name: Checkout diffusers
+        uses: actions/checkout@v3
+        with:
+          fetch-depth: 2
+
+      - name: Update clone using environment variables
+        run: |
+          echo "original branch = $(git branch --show-current)"
+          git fetch && git checkout ${{ env.CI_BRANCH }}
+          echo "updated branch = $(git branch --show-current)"
+          git checkout ${{ env.CI_SHA }}
+          echo "log = $(git log -n 1)"
+
+      - name: Cleanup
+        run: |
+          rm -rf tests/__pycache__
+          rm -rf tests/models/__pycache__
+          rm -rf reports
+
+  run_check_runners:
+    name: Check Runners
+    needs: setup
+    strategy:
+      matrix:
+        machine_type: [ single-gpu, multi-gpu ]
+    runs-on: [ self-hosted, docker-gpu, '${{ matrix.machine_type }}' ]
+    container:
+      image: nvcr.io/nvidia/pytorch:22.07-py3
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
+  run_tests_single_gpu:
+    name: Model tests
+    needs: [ setup, run_check_runners ]
+    strategy:
+      fail-fast: false
+      matrix:
+        machine_type: [ single-gpu ]
+    runs-on: [ self-hosted, docker-gpu, '${{ matrix.machine_type }}' ]
+    container:
+      image: nvcr.io/nvidia/pytorch:22.07-py3
+      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
 
     steps:
-    - uses: actions/checkout@v3
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: "3.7"
+    - name: NVIDIA-SMI
+      run: |
+        nvidia-smi
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         python -m pip install -e .[quality,test]
-    - name: Test with pytest
+    - name: Run all non-slow selected tests on GPU
       run: |
-        python -m pytest -n 3 --max-worker-restart=0 --dist=loadfile -s 
+        python -m pytest -n 2 --max-worker-restart=0 --dist=loadfile -s 
