@@ -9,7 +9,7 @@ env:
   HF_HOME: /mnt/cache
   OMP_NUM_THREADS: 8
   MKL_NUM_THREADS: 8
-  PYTEST_TIMEOUT: 120
+  PYTEST_TIMEOUT: 180
   RUN_SLOW: yes
 
 jobs:
@@ -40,6 +40,6 @@ jobs:
         python -m pip install -e .[quality,test]
         python -m pip install scipy transformers
 
-    - name: Run all non-slow selected tests on GPU
+    - name: Run all (incl. slow) tests on GPU
       run: |
         python -m pytest -n 2 --max-worker-restart=0 --dist=loadfile -s 
