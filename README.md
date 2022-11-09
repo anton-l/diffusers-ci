@@ -14,7 +14,7 @@
         <img alt="Contributor Covenant" src="https://img.shields.io/badge/Contributor%20Covenant-2.0-4baaaa.svg">
     </a>
 </p>
-
+test
 🤗 Diffusers provides pretrained diffusion models across multiple modalities, such as vision and audio, and serves
 as a modular toolbox for inference and training of diffusion models.
 
